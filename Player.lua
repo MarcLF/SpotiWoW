@@ -3,7 +3,10 @@ local WML = WoWMusicLibrary
 local Player = {
 	trackId = nil,
 	playlistId = nil,
+	queueTrackIds = nil,
 	soundHandle = nil,
+	finishTicker = nil,
+	finishToken = 0,
 	isPlaying = false,
 	savedMusicEnabled = nil,
 }
@@ -26,14 +29,27 @@ local function SetCVarValue(name, value)
 	end
 end
 
+local function CopyTrackIds(trackIds)
+	local copy = {}
+
+	for _, trackId in ipairs(trackIds or {}) do
+		table.insert(copy, trackId)
+	end
+
+	return copy
+end
+
 function Player:Initialize()
 	self.playlistId = WML.db.profile.selectedPlaylistId
+	WML:RegisterEvent("SOUNDKIT_FINISHED", function(_, soundHandle)
+		Player:OnSoundFinished(soundHandle)
+	end)
 	WML:RegisterEvent("PLAYER_LOGOUT", function()
 		Player:RestoreZoneMusic()
 	end)
 end
 
-function Player:PlayTrack(trackId, playlistId)
+function Player:PlayTrack(trackId, playlistId, trackIds)
 	local track = WML.Library:GetTrack(trackId)
 	if not track then
 		WML:Print("Track not found: " .. tostring(trackId))
@@ -43,7 +59,7 @@ function Player:PlayTrack(trackId, playlistId)
 	self:Stop(true, true)
 	self:MuteZoneMusic()
 
-	local willPlay, soundHandle = PlaySoundFile(track.value, "Master")
+	local willPlay, soundHandle = PlaySoundFile(track.value, "Master", false, true)
 	if not willPlay then
 		self:RestoreZoneMusic()
 		WML:Print("Could not play: " .. track.title)
@@ -53,20 +69,57 @@ function Player:PlayTrack(trackId, playlistId)
 
 	self.trackId = track.id
 	self.playlistId = playlistId or WML.db.profile.selectedPlaylistId
+	if trackIds then
+		self.queueTrackIds = CopyTrackIds(trackIds)
+	end
 	self.soundHandle = soundHandle
 	self.isPlaying = true
+	self:StartFinishWatcher()
 
 	WML:NotifyChanged()
 	return true
 end
 
-function Player:Stop(silent, keepZoneMusicMuted)
-	if self.soundHandle then
-		StopSound(self.soundHandle)
+function Player:SetQueue(playlistId, trackIds)
+	self.playlistId = playlistId or self.playlistId
+	self.queueTrackIds = CopyTrackIds(trackIds)
+end
+
+function Player:OnSoundFinished(soundHandle)
+	if not self.isPlaying or not self.soundHandle or soundHandle ~= self.soundHandle then
+		return
 	end
+
+	self:CancelFinishWatcher()
+	self.soundHandle = nil
+	self.isPlaying = false
+
+	if WML.db.profile.repeatMode == "none" and not WML.db.profile.shuffle then
+		self:RestoreZoneMusic()
+		WML:NotifyChanged()
+		return
+	end
+
+	local track, playlistId = self:GetRelativeTrack(1)
+	if track then
+		self:PlayTrack(track.id, playlistId)
+	else
+		self:RestoreZoneMusic()
+		WML:NotifyChanged()
+	end
+end
+
+function Player:Stop(silent, keepZoneMusicMuted)
+	self:CancelFinishWatcher()
+
+	local soundHandle = self.soundHandle
 
 	self.soundHandle = nil
 	self.isPlaying = false
+
+	if soundHandle then
+		StopSound(soundHandle)
+	end
 
 	if not keepZoneMusicMuted then
 		self:RestoreZoneMusic()
@@ -75,6 +128,37 @@ function Player:Stop(silent, keepZoneMusicMuted)
 	if not silent then
 		WML:NotifyChanged()
 	end
+end
+
+function Player:CancelFinishWatcher()
+	self.finishToken = (self.finishToken or 0) + 1
+
+	if self.finishTicker then
+		self.finishTicker:Cancel()
+		self.finishTicker = nil
+	end
+end
+
+function Player:StartFinishWatcher()
+	self:CancelFinishWatcher()
+
+	if not C_Timer or not C_Timer.NewTicker or not C_Sound or not C_Sound.IsPlaying or not self.soundHandle then
+		return
+	end
+
+	local token = self.finishToken
+	self.finishTicker = C_Timer.NewTicker(1, function(ticker)
+		if token ~= Player.finishToken or not Player.isPlaying or not Player.soundHandle then
+			ticker:Cancel()
+			return
+		end
+
+		local ok, isPlaying = pcall(C_Sound.IsPlaying, Player.soundHandle)
+		if ok and not isPlaying then
+			ticker:Cancel()
+			Player:OnSoundFinished(Player.soundHandle)
+		end
+	end)
 end
 
 function Player:MuteZoneMusic()
@@ -139,7 +223,7 @@ function Player:GetCurrentOrFirstTrack()
 		return WML.Library:GetTrack(self.trackId)
 	end
 
-	local tracks = WML.Library:GetPlaylistTracks(WML.db.profile.selectedPlaylistId)
+	local tracks = self:GetPlaybackTracks(WML.db.profile.selectedPlaylistId)
 	if #tracks == 0 then
 		tracks = WML.Library:GetPlaylistTracks("official-kalimdor")
 		self.playlistId = "official-kalimdor"
@@ -148,9 +232,28 @@ function Player:GetCurrentOrFirstTrack()
 	return tracks[1]
 end
 
+function Player:GetPlaybackTracks(playlistId)
+	local tracks = {}
+
+	if self.queueTrackIds and #self.queueTrackIds > 0 then
+		for _, trackId in ipairs(self.queueTrackIds) do
+			local track = WML.Library:GetTrack(trackId)
+			if track then
+				table.insert(tracks, track)
+			end
+		end
+
+		if #tracks > 0 then
+			return tracks
+		end
+	end
+
+	return WML.Library:GetPlaylistTracks(playlistId)
+end
+
 function Player:GetRelativeTrack(delta)
 	local playlistId = self.playlistId or WML.db.profile.selectedPlaylistId
-	local tracks = WML.Library:GetPlaylistTracks(playlistId)
+	local tracks = self:GetPlaybackTracks(playlistId)
 
 	if #tracks == 0 then
 		playlistId = "official-kalimdor"

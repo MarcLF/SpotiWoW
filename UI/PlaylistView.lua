@@ -1,12 +1,12 @@
 local WML = WoWMusicLibrary
 local UI = WML.UI
 
-local function AddDropdownButton(text, checked, func)
-    local info = UIDropDownMenu_CreateInfo()
-    info.text = text
-    info.checked = checked
-    info.func = func
-    UIDropDownMenu_AddButton(info)
+local function AddDropdownOption(options, text, checked, func)
+    table.insert(options, {
+        text = text,
+        checked = checked,
+        func = func,
+    })
 end
 
 local function ContainsValue(list, value)
@@ -59,6 +59,28 @@ local function TrackMeta(track)
     return table.concat(parts, " - ")
 end
 
+local function GetTrackIds(sourceTracks)
+    local trackIds = {}
+
+    for _, track in ipairs(sourceTracks or {}) do
+        table.insert(trackIds, track.id)
+    end
+
+    return trackIds
+end
+
+local function GetPageTracks(sourceTracks, page, pageSize)
+    local pageTracks = {}
+    local firstIndex = ((page - 1) * pageSize) + 1
+    local lastIndex = math.min(firstIndex + pageSize - 1, #sourceTracks)
+
+    for index = firstIndex, lastIndex do
+        table.insert(pageTracks, sourceTracks[index])
+    end
+
+    return pageTracks, firstIndex, lastIndex
+end
+
 function UI:GetSelectedTargetPlaylist()
     local playlists = WML.Library:GetUserPlaylists()
     if #playlists == 0 then
@@ -89,24 +111,27 @@ function UI:GetTargetPlaylistForAdd()
 end
 
 function UI:BuildTargetDropdown()
+    local options = {}
     local playlists = WML.Library:GetUserPlaylists()
 
     if #playlists == 0 then
-        AddDropdownButton("Create My Playlist", false, function()
+        AddDropdownOption(options, "Create My Playlist", false, function()
             local playlist = WML.Library:GetOrCreateDefaultUserPlaylist(false)
             self.selectedTargetPlaylistId = playlist.id
             self:Refresh()
         end)
-        return
+        return options
     end
 
     for _, playlist in ipairs(playlists) do
         local playlistId = playlist.id
-        AddDropdownButton(playlist.name, playlistId == self.selectedTargetPlaylistId, function()
+        AddDropdownOption(options, playlist.name, playlistId == self.selectedTargetPlaylistId, function()
             self.selectedTargetPlaylistId = playlistId
             self:RefreshTargetDropdown()
         end)
     end
+
+    return options
 end
 
 function UI:RefreshTargetDropdown()
@@ -115,13 +140,14 @@ function UI:RefreshTargetDropdown()
     end
 
     local playlist = self:GetSelectedTargetPlaylist()
-    UIDropDownMenu_SetText(self.targetDropdown, playlist and playlist.name or "My Playlist (new)")
+    self:SetDropdownText(self.targetDropdown, playlist and playlist.name or "My Playlist (new)")
 end
 
 function UI:BuildContinentDropdown()
+    local options = {}
     local selected = self.filter.continent or "all"
 
-    AddDropdownButton("All continents", selected == "all", function()
+    AddDropdownOption(options, "All continents", selected == "all", function()
         self.filter.continent = "all"
         self.filter.zone = "all"
         self.filter.biome = "all"
@@ -129,27 +155,30 @@ function UI:BuildContinentDropdown()
     end)
 
     for _, continent in ipairs(WML.Library:GetContinents()) do
-        AddDropdownButton(continent, selected == continent, function()
+        AddDropdownOption(options, continent, selected == continent, function()
             self.filter.continent = continent
             self.filter.zone = "all"
             self.filter.biome = "all"
             self:RefreshTracks()
         end)
     end
+
+    return options
 end
 
 function UI:BuildZoneDropdown()
+    local options = {}
     local selectedZone = self.filter.zone or "all"
     local selectedBiome = self.filter.biome or "all"
 
-    AddDropdownButton("All zones/biomes", selectedZone == "all" and selectedBiome == "all", function()
+    AddDropdownOption(options, "All zones/biomes", selectedZone == "all" and selectedBiome == "all", function()
         self.filter.zone = "all"
         self.filter.biome = "all"
         self:RefreshTracks()
     end)
 
     for _, zone in ipairs(WML.Library:GetZones(self.filter.continent)) do
-        AddDropdownButton(zone, selectedZone == zone, function()
+        AddDropdownOption(options, zone, selectedZone == zone, function()
             self.filter.zone = zone
             self.filter.biome = "all"
             self:RefreshTracks()
@@ -158,31 +187,36 @@ function UI:BuildZoneDropdown()
 
     for _, biome in ipairs(WML.Library:GetBiomes(self.filter.continent)) do
         local text = "Biome: " .. biome
-        AddDropdownButton(text, selectedBiome == biome, function()
+        AddDropdownOption(options, text, selectedBiome == biome, function()
             self.filter.zone = "all"
             self.filter.biome = biome
             self:RefreshTracks()
         end)
     end
+
+    return options
 end
 
 function UI:BuildTimeDropdown()
+    local options = {}
     local selected = self.filter.timeOfDay or "all"
 
-    AddDropdownButton("Any time", selected == "all", function()
+    AddDropdownOption(options, "Any time", selected == "all", function()
         self.filter.timeOfDay = "all"
         self:RefreshTracks()
     end)
 
-    AddDropdownButton("Day", selected == "day", function()
+    AddDropdownOption(options, "Day", selected == "day", function()
         self.filter.timeOfDay = "day"
         self:RefreshTracks()
     end)
 
-    AddDropdownButton("Night", selected == "night", function()
+    AddDropdownOption(options, "Night", selected == "night", function()
         self.filter.timeOfDay = "night"
         self:RefreshTracks()
     end)
+
+    return options
 end
 
 function UI:RefreshFilterDropdowns()
@@ -203,25 +237,25 @@ function UI:RefreshFilterDropdowns()
         self.filter.biome = "all"
     end
 
-    UIDropDownMenu_SetText(
+    self:SetDropdownText(
         self.continentDropdown,
         self.filter.continent ~= "all" and self.filter.continent or "All continents"
     )
 
     if self.filter.zone ~= "all" then
-        UIDropDownMenu_SetText(self.zoneDropdown, self.filter.zone)
+        self:SetDropdownText(self.zoneDropdown, self.filter.zone)
     elseif self.filter.biome ~= "all" then
-        UIDropDownMenu_SetText(self.zoneDropdown, "Biome: " .. self.filter.biome)
+        self:SetDropdownText(self.zoneDropdown, "Biome: " .. self.filter.biome)
     else
-        UIDropDownMenu_SetText(self.zoneDropdown, "All zones/biomes")
+        self:SetDropdownText(self.zoneDropdown, "All zones/biomes")
     end
 
     if self.filter.timeOfDay == "day" then
-        UIDropDownMenu_SetText(self.timeDropdown, "Day")
+        self:SetDropdownText(self.timeDropdown, "Day")
     elseif self.filter.timeOfDay == "night" then
-        UIDropDownMenu_SetText(self.timeDropdown, "Night")
+        self:SetDropdownText(self.timeDropdown, "Night")
     else
-        UIDropDownMenu_SetText(self.timeDropdown, "Any time")
+        self:SetDropdownText(self.timeDropdown, "Any time")
     end
 end
 
@@ -230,6 +264,8 @@ function UI:GetRowsForPlaylist(playlist, isOfficial)
     local filters = {
         search = self.searchBox:GetText(),
     }
+    local playlistTracks
+    local action
 
     if isOfficial then
         filters.continent = self.filter.continent
@@ -237,30 +273,56 @@ function UI:GetRowsForPlaylist(playlist, isOfficial)
         filters.biome = self.filter.biome
         filters.timeOfDay = self.filter.timeOfDay
 
-        self:AddTrackRows(rows, WML.Library:FilterTracks(WML.Library:GetPlaylistTracks(playlist.id), filters), "add", playlist.id)
-        return rows
-    end
-
-    local playlistTracks = WML.Library:FilterTracks(WML.Library:GetPlaylistTracks(playlist.id), filters)
-    if #playlistTracks > 0 then
-        self:AddHeader(rows, "Playlist Tracks")
-        self:AddTrackRows(rows, playlistTracks, "remove", playlist.id)
+        playlistTracks = WML.Library:FilterTracks(WML.Library:GetPlaylistTracks(playlist.id), filters)
+        action = "add"
     else
-        self:AddHeader(rows, "No tracks yet")
+        playlistTracks = WML.Library:FilterTracks(WML.Library:GetPlaylistTracks(playlist.id), filters)
+        action = "remove"
+
+        if #playlistTracks > 0 then
+            self:AddHeader(rows, "Playlist Tracks")
+        else
+            self:AddHeader(rows, "No tracks yet")
+        end
     end
 
-    return rows
+    local pageSize = self.pageSize or 50
+    local maxPage = math.max(1, math.ceil(#playlistTracks / pageSize))
+    self.trackPage = math.min(math.max(self.trackPage or 1, 1), maxPage)
+
+    local pageTracks, firstIndex, lastIndex = GetPageTracks(playlistTracks, self.trackPage, pageSize)
+    self:AddTrackRows(rows, pageTracks, action, playlist.id)
+
+    return rows, GetTrackIds(playlistTracks), #playlistTracks, firstIndex, lastIndex
 end
 
 function UI:PlayVisibleTrack(shuffle)
-    local trackIds = self.visibleTrackIds or {}
+    local trackIds = self.filteredTrackIds or {}
 
     if #trackIds == 0 then
         return
     end
 
     local index = shuffle and math.random(#trackIds) or 1
-    WML.Player:PlayTrack(trackIds[index], self.currentPlaylistId)
+    WML.Player:PlayTrack(trackIds[index], self.currentPlaylistId, trackIds)
+end
+
+function UI:ToggleShuffle()
+    local enabled = not WML.db.profile.shuffle
+    local trackIds = self.filteredTrackIds or {}
+
+    WML.db.profile.shuffle = enabled
+
+    if enabled then
+        WML.Player:SetQueue(self.currentPlaylistId, trackIds)
+
+        if not WML.Player.isPlaying and #trackIds > 0 then
+            self:PlayVisibleTrack(true)
+            return
+        end
+    end
+
+    WML:NotifyChanged()
 end
 
 function UI:AddAllVisibleTracks()
@@ -270,16 +332,60 @@ function UI:AddAllVisibleTracks()
         return
     end
 
-    WML.Library:AddTracksToPlaylist(targetPlaylist.id, self.visibleTrackIds or {})
+    WML.Library:AddTracksToPlaylist(targetPlaylist.id, self.filteredTrackIds or {})
 end
 
 function UI:RefreshPlaylistActions(isOfficial)
-    local hasTracks = self.visibleTrackIds and #self.visibleTrackIds > 0
+    local hasTracks = self.filteredTrackIds and #self.filteredTrackIds > 0
 
     SetButtonEnabled(self.playlistPlayButton, hasTracks)
-    SetButtonEnabled(self.playlistShuffleButton, hasTracks)
     self.playlistAddAllButton:SetShown(isOfficial)
     SetButtonEnabled(self.playlistAddAllButton, isOfficial and hasTracks)
+end
+
+function UI:GetTrackPageKey(playlist, isOfficial)
+    local parts = {
+        playlist.id,
+        self.searchBox:GetText() or "",
+    }
+
+    if isOfficial then
+        table.insert(parts, self.filter.continent or "all")
+        table.insert(parts, self.filter.zone or "all")
+        table.insert(parts, self.filter.biome or "all")
+        table.insert(parts, self.filter.timeOfDay or "all")
+    end
+
+    return table.concat(parts, "\031")
+end
+
+function UI:SetTrackPage(page)
+    self.trackPage = math.max(1, page or 1)
+    self:RefreshTracks()
+end
+
+function UI:RefreshPageControls(totalTracks, firstIndex, lastIndex)
+    if not self.prevPageButton then
+        return
+    end
+
+    totalTracks = totalTracks or 0
+    local pageSize = self.pageSize or 50
+    local maxPage = math.max(1, math.ceil(totalTracks / pageSize))
+    local hasPages = totalTracks > pageSize
+
+    self.prevPageButton:SetShown(hasPages)
+    self.nextPageButton:SetShown(hasPages)
+    self.pageText:SetShown(totalTracks > 0)
+
+    if totalTracks > 0 then
+        self.pageText:SetText(string.format("%d-%d of %d", firstIndex or 1, lastIndex or totalTracks, totalTracks))
+    else
+        self.pageText:SetText("")
+    end
+
+    SetButtonEnabled(self.prevPageButton, hasPages and (self.trackPage or 1) > 1)
+    SetButtonEnabled(self.nextPageButton, hasPages and (self.trackPage or 1) < maxPage)
 end
 
 function UI:SetBrowseControlsShown(isOfficial)
@@ -294,6 +400,8 @@ function UI:SetBrowseControlsShown(isOfficial)
 end
 
 function UI:RefreshTracks()
+    self:CloseDropdowns()
+
     local playlist, isOfficial = WML.Library:GetPlaylist(WML.db.profile.selectedPlaylistId)
     if not playlist then
         WML.Library:EnsureSelectedPlaylist()
@@ -315,8 +423,21 @@ function UI:RefreshTracks()
         self.renameBox:SetText(playlist.name)
     end
 
-    local rows = self:GetRowsForPlaylist(playlist, isOfficial)
-    local visibleTrackIds = {}
+    local pageKey = self:GetTrackPageKey(playlist, isOfficial)
+    local previousPage = self.trackPage or 1
+    local resetScroll = false
+
+    if pageKey ~= self.trackPageKey then
+        self.trackPageKey = pageKey
+        self.trackPage = 1
+        resetScroll = true
+    end
+
+    local rows, filteredTrackIds, totalTracks, firstIndex, lastIndex = self:GetRowsForPlaylist(playlist, isOfficial)
+    if self.trackPage ~= previousPage then
+        resetScroll = true
+    end
+
     local y = 0
 
     for index, rowData in ipairs(rows) do
@@ -346,7 +467,6 @@ function UI:RefreshTracks()
             local playlistId = rowData.playlistId
             local rowIsOfficial = isOfficial
 
-            table.insert(visibleTrackIds, trackId)
             self:SetBackdrop(row, trackId == WML.Player.trackId and self.colors.rowActive or self.colors.row, trackId == WML.Player.trackId and self.colors.borderBright or self.colors.border)
             row:SetHeight(38)
             row.title:ClearAllPoints()
@@ -359,7 +479,7 @@ function UI:RefreshTracks()
             row.meta:SetText(TrackMeta(track))
             row.play:Show()
             row.play:SetScript("OnClick", function()
-                WML.Player:PlayTrack(trackId, playlistId)
+                WML.Player:PlayTrack(trackId, playlistId, UI.filteredTrackIds)
             end)
             row.like:Show()
             row.like:SetText(WML.Library:IsTrackLiked(trackId) and "Liked" or "Like")
@@ -391,7 +511,12 @@ function UI:RefreshTracks()
         self.trackRows[i]:Hide()
     end
 
-    self.visibleTrackIds = visibleTrackIds
+    self.filteredTrackIds = filteredTrackIds
     self.trackContent:SetSize(self.trackScroll:GetWidth() - 22, math.max(1, -y))
+    self:RefreshPageControls(totalTracks, firstIndex, lastIndex)
     self:RefreshPlaylistActions(isOfficial)
+
+    if resetScroll then
+        self.trackScroll:SetVerticalScroll(0)
+    end
 end

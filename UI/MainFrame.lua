@@ -2,7 +2,7 @@ local WML = WoWMusicLibrary
 local UI = WML.UI
 
 local MIN_WIDTH = 960
-local MIN_HEIGHT = 430
+local MIN_HEIGHT = 560
 local MAX_WIDTH = 1200
 local MAX_HEIGHT = 800
 
@@ -95,14 +95,42 @@ function UI:CreateFrame()
 end
 
 function UI:CreateSidebar()
+    self.officialSidebarButtons = self.officialSidebarButtons or {}
+    self.userSidebarButtons = self.userSidebarButtons or {}
+
     local header = self.sidebar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     header:SetPoint("TOPLEFT", 12, -12)
     header:SetText("Browse")
     self.officialHeader = header
 
+    local officialScroll = CreateFrame("ScrollFrame", "WoWMusicLibraryOfficialPlaylistScroll", self.sidebar, "UIPanelScrollFrameTemplate")
+    self.officialScroll = officialScroll
+    officialScroll:SetPoint("TOPLEFT", 12, -36)
+    officialScroll:SetPoint("TOPRIGHT", self.sidebar, "TOPRIGHT", -30, -36)
+    officialScroll:SetHeight(160)
+    self:StyleScrollBar(officialScroll)
+
+    local officialContent = CreateFrame("Frame", nil, officialScroll)
+    self.officialContent = officialContent
+    officialContent:SetSize(1, 1)
+    officialScroll:SetScrollChild(officialContent)
+
     local userHeader = self.sidebar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     userHeader:SetText("User Playlists")
+    userHeader:SetPoint("TOPLEFT", officialScroll, "BOTTOMLEFT", 0, -14)
     self.userHeader = userHeader
+
+    local userScroll = CreateFrame("ScrollFrame", "WoWMusicLibraryUserPlaylistScroll", self.sidebar, "UIPanelScrollFrameTemplate")
+    self.userScroll = userScroll
+    userScroll:SetPoint("TOPLEFT", 12, -234)
+    userScroll:SetPoint("TOPRIGHT", self.sidebar, "TOPRIGHT", -30, -234)
+    userScroll:SetHeight(160)
+    self:StyleScrollBar(userScroll)
+
+    local userContent = CreateFrame("Frame", nil, userScroll)
+    self.userContent = userContent
+    userContent:SetSize(1, 1)
+    userScroll:SetScrollChild(userContent)
 
     local newBox = CreateFrame("EditBox", nil, self.sidebar, "InputBoxTemplate")
     self.newBox = newBox
@@ -148,21 +176,11 @@ function UI:CreateMain()
         UI:AddAllVisibleTracks()
     end)
 
-    local shuffle = CreateFrame("Button", nil, self.main, "UIPanelButtonTemplate")
-    self.playlistShuffleButton = shuffle
-    self:StyleButton(shuffle)
-    shuffle:SetSize(66, 24)
-    shuffle:SetPoint("RIGHT", addAll, "LEFT", -6, 0)
-    shuffle:SetText("Shuffle")
-    shuffle:SetScript("OnClick", function()
-        UI:PlayVisibleTrack(true)
-    end)
-
     local play = CreateFrame("Button", nil, self.main, "UIPanelButtonTemplate")
     self.playlistPlayButton = play
     self:StyleButton(play)
     play:SetSize(52, 24)
-    play:SetPoint("RIGHT", shuffle, "LEFT", -6, 0)
+    play:SetPoint("RIGHT", addAll, "LEFT", -6, 0)
     play:SetText("Play")
     play:SetScript("OnClick", function()
         UI:PlayVisibleTrack(false)
@@ -170,7 +188,7 @@ function UI:CreateMain()
 
     local search = CreateFrame("EditBox", nil, self.main, "InputBoxTemplate")
     self.searchBox = search
-    search:SetSize(200, 24)
+    search:SetSize(430, 28)
     search:SetPoint("TOPLEFT", 14, -46)
     search:SetAutoFocus(false)
     self:StyleEditBox(search)
@@ -180,51 +198,65 @@ function UI:CreateMain()
         end
     end)
 
-    local continentDropdown = CreateFrame("Frame", "WoWMusicLibraryContinentDropdown", self.main, "UIDropDownMenuTemplate")
+    local continentDropdown = self:CreateDropdown(self.main, 170, function()
+        return UI:BuildContinentDropdown()
+    end)
     self.continentDropdown = continentDropdown
-    continentDropdown:SetPoint("LEFT", search, "RIGHT", -4, -2)
-    UIDropDownMenu_SetWidth(continentDropdown, 128)
-    self:StyleDropdown(continentDropdown)
-    UIDropDownMenu_Initialize(continentDropdown, function()
-        UI:BuildContinentDropdown()
-    end)
+    continentDropdown:SetPoint("TOPLEFT", self.main, "TOPLEFT", 14, -80)
 
-    local zoneDropdown = CreateFrame("Frame", "WoWMusicLibraryZoneDropdown", self.main, "UIDropDownMenuTemplate")
+    local zoneDropdown = self:CreateDropdown(self.main, 230, function()
+        return UI:BuildZoneDropdown()
+    end)
     self.zoneDropdown = zoneDropdown
-    zoneDropdown:SetPoint("LEFT", continentDropdown, "RIGHT", -14, 0)
-    UIDropDownMenu_SetWidth(zoneDropdown, 142)
-    self:StyleDropdown(zoneDropdown)
-    UIDropDownMenu_Initialize(zoneDropdown, function()
-        UI:BuildZoneDropdown()
-    end)
+    zoneDropdown:SetPoint("TOPLEFT", continentDropdown, "TOPRIGHT", 8, 0)
 
-    local timeDropdown = CreateFrame("Frame", "WoWMusicLibraryTimeDropdown", self.main, "UIDropDownMenuTemplate")
-    self.timeDropdown = timeDropdown
-    timeDropdown:SetPoint("LEFT", zoneDropdown, "RIGHT", -14, 0)
-    UIDropDownMenu_SetWidth(timeDropdown, 96)
-    self:StyleDropdown(timeDropdown)
-    UIDropDownMenu_Initialize(timeDropdown, function()
-        UI:BuildTimeDropdown()
+    local timeDropdown = self:CreateDropdown(self.main, 140, function()
+        return UI:BuildTimeDropdown()
     end)
+    self.timeDropdown = timeDropdown
+    timeDropdown:SetPoint("TOPLEFT", zoneDropdown, "TOPRIGHT", 8, 0)
 
     local targetLabel = self.main:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     self.targetLabel = targetLabel
-    targetLabel:SetPoint("TOPLEFT", 18, -78)
+    targetLabel:SetPoint("TOPLEFT", 18, -130)
     targetLabel:SetText("Add to")
 
-    local targetDropdown = CreateFrame("Frame", "WoWMusicLibraryTargetDropdown", self.main, "UIDropDownMenuTemplate")
-    self.targetDropdown = targetDropdown
-    targetDropdown:SetPoint("LEFT", targetLabel, "RIGHT", -8, -2)
-    UIDropDownMenu_SetWidth(targetDropdown, 170)
-    self:StyleDropdown(targetDropdown)
-    UIDropDownMenu_Initialize(targetDropdown, function()
-        UI:BuildTargetDropdown()
+    local targetDropdown = self:CreateDropdown(self.main, 240, function()
+        return UI:BuildTargetDropdown()
     end)
+    self.targetDropdown = targetDropdown
+    targetDropdown:SetPoint("TOPLEFT", self.main, "TOPLEFT", 74, -122)
+
+    local nextPage = CreateFrame("Button", nil, self.main, "UIPanelButtonTemplate")
+    self.nextPageButton = nextPage
+    self:StyleButton(nextPage)
+    nextPage:SetSize(54, 24)
+    nextPage:SetPoint("TOPRIGHT", self.main, "TOPRIGHT", -14, -124)
+    nextPage:SetText("Next")
+    nextPage:SetScript("OnClick", function()
+        UI:SetTrackPage((UI.trackPage or 1) + 1)
+    end)
+
+    local prevPage = CreateFrame("Button", nil, self.main, "UIPanelButtonTemplate")
+    self.prevPageButton = prevPage
+    self:StyleButton(prevPage)
+    prevPage:SetSize(54, 24)
+    prevPage:SetPoint("RIGHT", nextPage, "LEFT", -6, 0)
+    prevPage:SetText("Prev")
+    prevPage:SetScript("OnClick", function()
+        UI:SetTrackPage((UI.trackPage or 1) - 1)
+    end)
+
+    local pageText = self.main:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    self.pageText = pageText
+    pageText:SetPoint("RIGHT", prevPage, "LEFT", -8, 0)
+    pageText:SetWidth(150)
+    pageText:SetJustifyH("RIGHT")
 
     local rename = CreateFrame("EditBox", nil, self.main, "InputBoxTemplate")
     self.renameBox = rename
-    rename:SetSize(170, 24)
-    rename:SetPoint("LEFT", search, "RIGHT", 14, 0)
+    rename:SetSize(220, 28)
+    rename:SetPoint("TOPLEFT", self.main, "TOPLEFT", 14, -80)
     rename:SetAutoFocus(false)
     self:StyleEditBox(rename)
 
@@ -248,10 +280,11 @@ function UI:CreateMain()
         WML.Library:DeletePlaylist(WML.db.profile.selectedPlaylistId)
     end)
 
-    local scroll = CreateFrame("ScrollFrame", nil, self.main, "UIPanelScrollFrameTemplate")
+    local scroll = CreateFrame("ScrollFrame", "WoWMusicLibraryTrackScroll", self.main, "UIPanelScrollFrameTemplate")
     self.trackScroll = scroll
-    scroll:SetPoint("TOPLEFT", 14, -110)
+    scroll:SetPoint("TOPLEFT", 14, -166)
     scroll:SetPoint("BOTTOMRIGHT", -30, 14)
+    self:StyleScrollBar(scroll)
 
     local content = CreateFrame("Frame", nil, scroll)
     self.trackContent = content
@@ -260,10 +293,20 @@ function UI:CreateMain()
 end
 
 function UI:CreatePlayerBar()
+    local shuffle = CreateFrame("Button", nil, self.bottom, "UIPanelButtonTemplate")
+    self.shuffleButton = shuffle
+    self:StyleButton(shuffle)
+    shuffle:SetSize(58, 28)
+    shuffle:SetPoint("LEFT", 14, 0)
+    shuffle:SetText("Shuffle")
+    shuffle:SetScript("OnClick", function()
+        UI:ToggleShuffle()
+    end)
+
     local prev = CreateFrame("Button", nil, self.bottom, "UIPanelButtonTemplate")
     self:StyleButton(prev)
     prev:SetSize(34, 28)
-    prev:SetPoint("LEFT", 14, 0)
+    prev:SetPoint("LEFT", shuffle, "RIGHT", 6, 0)
     prev:SetText("<<")
     prev:SetScript("OnClick", function()
         WML.Player:Previous()
@@ -337,54 +380,70 @@ end
 
 function UI:RefreshSidebar()
     local selectedPlaylistId = WML.db.profile.selectedPlaylistId
-    local y = -36
-    local index = 1
+    local officialY = 0
+    local officialIndex = 1
 
     for _, playlist in ipairs(WML.Library:GetOfficialPlaylists()) do
         local playlistId = playlist.id
-        local button = self:GetSidebarButton(index)
+        local button = self:GetSidebarButton(officialIndex, self.officialContent, self.officialSidebarButtons)
         button:ClearAllPoints()
-        button:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 12, y)
-        button:SetPoint("RIGHT", self.sidebar, "RIGHT", -12, 0)
+        button:SetPoint("TOPLEFT", self.officialContent, "TOPLEFT", 0, officialY)
+        button:SetPoint("RIGHT", self.officialContent, "RIGHT", 0, 0)
         button.text:SetText(playlist.name)
         self:SetBackdrop(button, playlistId == selectedPlaylistId and self.colors.rowActive or self.colors.row, playlistId == selectedPlaylistId and self.colors.borderBright or self.colors.border)
         button:SetScript("OnClick", function()
             WML.Library:SelectPlaylist(playlistId)
         end)
         button:Show()
-        y = y - 32
-        index = index + 1
+        officialY = officialY - 32
+        officialIndex = officialIndex + 1
     end
 
-    self.userHeader:ClearAllPoints()
-    self.userHeader:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 12, y - 10)
-    y = y - 34
+    for i = officialIndex, #self.officialSidebarButtons do
+        self.officialSidebarButtons[i]:Hide()
+    end
+
+    local officialWidth = self.officialScroll:GetWidth() or 0
+    if officialWidth <= 1 then
+        officialWidth = 178
+    end
+    self.officialContent:SetSize(math.max(1, officialWidth - 22), math.max(1, -officialY))
+
+    local userY = 0
+    local userIndex = 1
 
     for _, playlist in ipairs(WML.Library:GetUserPlaylists()) do
         local playlistId = playlist.id
-        local button = self:GetSidebarButton(index)
+        local button = self:GetSidebarButton(userIndex, self.userContent, self.userSidebarButtons)
         button:ClearAllPoints()
-        button:SetPoint("TOPLEFT", self.sidebar, "TOPLEFT", 12, y)
-        button:SetPoint("RIGHT", self.sidebar, "RIGHT", -12, 0)
+        button:SetPoint("TOPLEFT", self.userContent, "TOPLEFT", 0, userY)
+        button:SetPoint("RIGHT", self.userContent, "RIGHT", 0, 0)
         button.text:SetText(playlist.name)
         self:SetBackdrop(button, playlistId == selectedPlaylistId and self.colors.rowActive or self.colors.row, playlistId == selectedPlaylistId and self.colors.borderBright or self.colors.border)
         button:SetScript("OnClick", function()
             WML.Library:SelectPlaylist(playlistId)
         end)
         button:Show()
-        y = y - 32
-        index = index + 1
+        userY = userY - 32
+        userIndex = userIndex + 1
     end
 
-    for i = index, #self.sidebarButtons do
-        self.sidebarButtons[i]:Hide()
+    for i = userIndex, #self.userSidebarButtons do
+        self.userSidebarButtons[i]:Hide()
     end
+
+    local userWidth = self.userScroll:GetWidth() or 0
+    if userWidth <= 1 then
+        userWidth = 178
+    end
+    self.userContent:SetSize(math.max(1, userWidth - 22), math.max(1, -userY))
 end
 
 function UI:RefreshPlayerBar()
     local state = WML.Player:GetState()
 
     self.playButton:SetText(state.isPlaying and "Pause" or "Play")
+    self:SetButtonActive(self.shuffleButton, WML.db.profile.shuffle)
     self.progress:SetValue(state.isPlaying and 1 or 0)
 
     if state.track then

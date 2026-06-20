@@ -3,7 +3,10 @@ local WML = WoWMusicLibrary
 local UI = WML.UI or {
     sidebarButtons = {},
     trackRows = {},
+    dropdowns = {},
     selectedTargetPlaylistId = nil,
+    trackPage = 1,
+    pageSize = 50,
     filter = {
         continent = "all",
         zone = "all",
@@ -118,11 +121,15 @@ function UI:StyleButton(button)
 
     button:HookScript("OnEnter", function(control)
         if control:IsEnabled() then
-            UI:SkinBox(control, colors.buttonHover, colors.borderBright)
+            UI:SkinBox(control, control.wmlActive and colors.rowActive or colors.buttonHover, colors.borderBright)
         end
     end)
     button:HookScript("OnLeave", function(control)
-        UI:SkinBox(control, control:IsEnabled() and colors.button or colors.buttonDisabled, colors.border)
+        if control.wmlActive then
+            UI:SkinBox(control, colors.rowActive, colors.accent)
+        else
+            UI:SkinBox(control, control:IsEnabled() and colors.button or colors.buttonDisabled, colors.border)
+        end
     end)
     button:HookScript("OnMouseDown", function(control)
         if control:IsEnabled() then
@@ -130,8 +137,21 @@ function UI:StyleButton(button)
         end
     end)
     button:HookScript("OnMouseUp", function(control)
-        UI:SkinBox(control, control:IsEnabled() and colors.buttonHover or colors.buttonDisabled, colors.border)
+        if control.wmlActive then
+            UI:SkinBox(control, colors.rowActive, colors.accent)
+        else
+            UI:SkinBox(control, control:IsEnabled() and colors.buttonHover or colors.buttonDisabled, colors.border)
+        end
     end)
+end
+
+function UI:SetButtonActive(button, active)
+    if not button then
+        return
+    end
+
+    button.wmlActive = active and true or false
+    self:SkinBox(button, button.wmlActive and colors.rowActive or colors.button, button.wmlActive and colors.accent or colors.border)
 end
 
 function UI:StyleEditBox(editBox)
@@ -145,22 +165,172 @@ function UI:StyleEditBox(editBox)
     editBox:SetTextColor(colors.text[1], colors.text[2], colors.text[3], colors.text[4])
 end
 
-function UI:StyleDropdown(dropdown)
-    HideFrameTextures(dropdown)
-    self:SkinBox(dropdown, colors.input, colors.border, 4)
+function UI:SetDropdownText(dropdown, text)
+    if dropdown and dropdown.text then
+        dropdown.text:SetText(text)
+    end
+end
 
-    local name = dropdown:GetName()
-    local button = name and _G[name .. "Button"]
-    if button then
-        HideFrameTextures(button)
+function UI:CloseDropdowns(except)
+    for _, dropdown in ipairs(self.dropdowns) do
+        if dropdown ~= except and dropdown.menu then
+            dropdown.menu:Hide()
+        end
+    end
+end
+
+function UI:CreateDropdown(parent, width, getOptions)
+    local dropdown = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    table.insert(self.dropdowns, dropdown)
+
+    dropdown:SetSize(width, 28)
+    dropdown.getOptions = getOptions
+    self:SkinBox(dropdown, colors.input, colors.border)
+
+    dropdown.text = dropdown:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    dropdown.text:SetPoint("LEFT", 10, 1)
+    dropdown.text:SetPoint("RIGHT", -28, 1)
+    dropdown.text:SetJustifyH("CENTER")
+    dropdown.text:SetTextColor(colors.text[1], colors.text[2], colors.text[3], colors.text[4])
+
+    dropdown.arrow = dropdown:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    dropdown.arrow:SetPoint("RIGHT", -12, 1)
+    dropdown.arrow:SetText("v")
+    dropdown.arrow:SetTextColor(colors.text[1], colors.text[2], colors.text[3], colors.text[4])
+
+    dropdown:SetScript("OnClick", function(control)
+        UI:ToggleDropdown(control)
+    end)
+
+    return dropdown
+end
+
+function UI:ToggleDropdown(dropdown)
+    if not dropdown.menu then
+        local menu = CreateFrame("Frame", nil, self.frame, "BackdropTemplate")
+        dropdown.menu = menu
+        menu:SetFrameStrata("DIALOG")
+        menu:SetClampedToScreen(true)
+        menu:EnableMouse(true)
+        self:SetBackdrop(menu, colors.panel, colors.borderBright)
+
+        local scroll = CreateFrame("ScrollFrame", nil, menu, "UIPanelScrollFrameTemplate")
+        dropdown.scroll = scroll
+        scroll:SetPoint("TOPLEFT", 2, -2)
+        scroll:SetPoint("BOTTOMRIGHT", -22, 2)
+        self:StyleScrollBar(scroll)
+
+        local content = CreateFrame("Frame", nil, scroll)
+        dropdown.content = content
+        scroll:SetScrollChild(content)
+
+        menu:SetScript("OnMouseWheel", function(_, delta)
+            local current = scroll:GetVerticalScroll()
+            scroll:SetVerticalScroll(math.max(0, current - (delta * 72)))
+        end)
     end
 
-    if not dropdown.wmlArrow then
-        dropdown.wmlArrow = dropdown:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        dropdown.wmlArrow:SetPoint("RIGHT", -22, 2)
-        dropdown.wmlArrow:SetText("v")
+    if dropdown.menu:IsShown() then
+        dropdown.menu:Hide()
+        return
     end
-    dropdown.wmlArrow:SetTextColor(colors.text[1], colors.text[2], colors.text[3], colors.text[4])
+
+    self:CloseDropdowns(dropdown)
+
+    local options = dropdown.getOptions() or {}
+    local rowHeight = 24
+    local visibleRows = math.min(#options, 20)
+    local hasScroll = #options > 20
+    local width = dropdown:GetWidth()
+    local height = math.max(1, visibleRows * rowHeight) + 4
+
+    dropdown.menu:ClearAllPoints()
+    dropdown.menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
+    dropdown.menu:SetSize(width, height)
+    dropdown.scroll:ClearAllPoints()
+    dropdown.scroll:SetPoint("TOPLEFT", 2, -2)
+    dropdown.scroll:SetPoint("BOTTOMRIGHT", hasScroll and -22 or -2, 2)
+    dropdown.content:SetSize(width - (hasScroll and 24 or 4), math.max(1, #options * rowHeight))
+    dropdown.scroll:SetVerticalScroll(0)
+
+    for index, option in ipairs(options) do
+        local row = dropdown.rows and dropdown.rows[index]
+        if not row then
+            dropdown.rows = dropdown.rows or {}
+            row = CreateFrame("Button", nil, dropdown.content, "BackdropTemplate")
+            dropdown.rows[index] = row
+            row:SetHeight(rowHeight)
+            row.text = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            row.text:SetPoint("LEFT", 8, 0)
+            row.text:SetPoint("RIGHT", -8, 0)
+            row.text:SetJustifyH("LEFT")
+        end
+
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", dropdown.content, "TOPLEFT", 0, -((index - 1) * rowHeight))
+        row:SetPoint("RIGHT", dropdown.content, "RIGHT", 0, 0)
+        row.text:SetText(option.text)
+        row.text:SetTextColor(colors.text[1], colors.text[2], colors.text[3], colors.text[4])
+        self:SetBackdrop(row, option.checked and colors.rowActive or colors.row, option.checked and colors.accent or colors.border)
+        row:SetScript("OnClick", function()
+            dropdown.menu:Hide()
+            option.func()
+        end)
+        row:Show()
+    end
+
+    for index = #options + 1, #(dropdown.rows or {}) do
+        dropdown.rows[index]:Hide()
+    end
+
+    local scrollBar = dropdown.scroll.ScrollBar
+    if scrollBar then
+        scrollBar:SetShown(hasScroll)
+    end
+
+    dropdown.menu:Show()
+end
+
+function UI:StyleScrollButton(button, text)
+    if not button then
+        return
+    end
+
+    HideFrameTextures(button)
+    self:SkinBox(button, colors.button, colors.border)
+
+    if not button.wmlText then
+        button.wmlText = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        button.wmlText:SetPoint("CENTER", 0, 0)
+    end
+
+    button.wmlText:SetText(text)
+    button.wmlText:SetTextColor(colors.text[1], colors.text[2], colors.text[3], colors.text[4])
+end
+
+function UI:StyleScrollBar(scroll)
+    local name = scroll:GetName()
+    local bar = scroll.ScrollBar or (name and _G[name .. "ScrollBar"])
+
+    if not bar then
+        return
+    end
+
+    HideFrameTextures(bar)
+    self:SkinBox(bar, colors.input, colors.border)
+    bar:SetWidth(18)
+
+    local barName = bar.GetName and bar:GetName()
+    local up = bar.ScrollUpButton or (barName and _G[barName .. "ScrollUpButton"])
+    local down = bar.ScrollDownButton or (barName and _G[barName .. "ScrollDownButton"])
+    self:StyleScrollButton(up, "")
+    self:StyleScrollButton(down, "")
+
+    local thumb = bar.ThumbTexture or (barName and _G[barName .. "ThumbTexture"])
+    if thumb then
+        thumb:SetTexture("Interface\\Buttons\\WHITE8x8")
+        thumb:SetVertexColor(colors.accent[1], colors.accent[2], colors.accent[3], 0.85)
+    end
 end
 
 function UI:SaveSize(frame)
@@ -172,14 +342,17 @@ function UI:SaveSize(frame)
     WML.db.profile.window.height = frame:GetHeight()
 end
 
-function UI:GetSidebarButton(index)
-    local button = self.sidebarButtons[index]
+function UI:GetSidebarButton(index, parent, buttons)
+    buttons = buttons or self.sidebarButtons
+    parent = parent or self.sidebar
+
+    local button = buttons[index]
     if button then
         return button
     end
 
-    button = CreateFrame("Button", nil, self.sidebar, "BackdropTemplate")
-    self.sidebarButtons[index] = button
+    button = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    buttons[index] = button
     self:SetBackdrop(button, colors.row)
     button:SetHeight(28)
     button:SetPoint("LEFT", 12, 0)
