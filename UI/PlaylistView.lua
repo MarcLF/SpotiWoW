@@ -18,6 +18,7 @@ local AUDIO_CHANNELS = {
 }
 
 local MINI_OPACITY_VALUES = { 1, 0.9, 0.8, 0.7, 0.6, 0.5 }
+local SCALE_VALUES = { 1, 0.95, 0.9, 0.85, 0.8, 0.75 }
 
 local function ContainsValue(list, value)
     for _, entry in ipairs(list) do
@@ -118,6 +119,11 @@ local function GetAudioChannelText(value)
 end
 
 local function GetMiniOpacityText(value)
+    value = tonumber(value) or 1
+    return string.format("%d%%", math.floor((value * 100) + 0.5))
+end
+
+local function GetScaleText(value)
     value = tonumber(value) or 1
     return string.format("%d%%", math.floor((value * 100) + 0.5))
 end
@@ -245,6 +251,21 @@ function UI:BuildMiniOpacityDropdown()
     return options
 end
 
+function UI:BuildScaleDropdown()
+    local options = {}
+    local selected = self:GetScale()
+
+    for _, value in ipairs(SCALE_VALUES) do
+        AddDropdownOption(options, GetScaleText(value), math.abs(selected - value) < 0.01, function()
+            WML.db.profile.uiScale = value
+            self:RefreshSettingsControls()
+            self:ApplyScale()
+        end)
+    end
+
+    return options
+end
+
 function UI:BuildTimeDropdown()
     local options = {}
     local selected = self.filter.timeOfDay or "all"
@@ -303,6 +324,10 @@ function UI:RefreshFilterDropdowns()
 end
 
 function UI:RefreshSettingsControls()
+    if self.scaleDropdown then
+        self:SetDropdownText(self.scaleDropdown, GetScaleText(self:GetScale()))
+    end
+
     if self.audioChannelDropdown then
         self:SetDropdownText(self.audioChannelDropdown, GetAudioChannelText(WML.db.profile.audioChannel or "Master"))
     end

@@ -1,11 +1,11 @@
 ## Interface: 120007
-## Title: SpotiWoW
+## Title: |cff54ff8aS|r|cff45f27fp|r|cff36e874o|r|cff2edf69t|r|cff25d45fi|r|cff1dca56W|r|cff16bd4eo|r|cff0eaa44W|r
 ## Notes: In-game music library and playlist player
 ## Author: Marc Lopez
 ## Version: @project-version@
 ## SavedVariables: SpotiWoWDB
 ## OptionalDeps: Ace3, LibWindow-1.1
-## IconTexture: Interface\Icons\INV_Misc_Note_01
+## IconTexture: Interface\AddOns\SpotiWoW\Media\spotiwow-icon.png
 ## AddonCompartmentFunc: SpotiWoW_OnAddonCompartmentClick
 ## AddonCompartmentFuncOnEnter: SpotiWoW_OnAddonCompartmentEnter
 ## AddonCompartmentFuncOnLeave: SpotiWoW_OnAddonCompartmentLeave
@@ -56,6 +56,8 @@ Data\Playlists\Shadowlands.lua
 Data\Playlists\Dragonflight.lua
 Data\Playlists\TheWarWithin.lua
 Data\Playlists\Midnight.lua
+Data\Playlists\Taverns.lua
+Data\Playlists\PVP.lua
 Data\Playlists\AllWowMusic.lua
 Library.lua
 Player.lua

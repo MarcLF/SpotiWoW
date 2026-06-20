@@ -35,6 +35,8 @@ local colors = {
 
 UI.colors = colors
 
+local PLAY_ICON = "Interface\\AddOns\\SpotiWoW\\Media\\icon-play.png"
+
 local function SetTextureColor(texture, color)
     texture:SetColorTexture(color[1], color[2], color[3], color[4])
 end
@@ -238,8 +240,9 @@ function UI:ToggleDropdown(dropdown)
 
     local options = dropdown.getOptions() or {}
     local rowHeight = 24
-    local visibleRows = math.min(#options, 20)
-    local hasScroll = #options > 20
+    local maxRows = dropdown.maxRows or 20
+    local visibleRows = math.min(#options, maxRows)
+    local hasScroll = #options > maxRows
     local width = dropdown:GetWidth()
     local height = math.max(1, visibleRows * rowHeight) + 4
 
@@ -379,7 +382,12 @@ function UI:GetTrackRow(index)
     self:StyleButton(row.play)
     row.play:SetSize(30, 22)
     row.play:SetPoint("LEFT", 8, 0)
-    row.play:SetText(">")
+    row.play:SetText("")
+    row.play.icon = row.play:CreateTexture(nil, "OVERLAY")
+    row.play.icon:SetPoint("CENTER")
+    row.play.icon:SetSize(14, 14)
+    row.play.icon:SetTexture(PLAY_ICON)
+    row.play.icon:SetVertexColor(colors.text[1], colors.text[2], colors.text[3], colors.text[4])
 
     row.like = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
     self:StyleButton(row.like)

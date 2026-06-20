@@ -40,12 +40,23 @@ local function CopyTrackIds(trackIds)
 end
 
 function Player:Initialize()
+	local activeSoundHandle = WML.db.profile.activeSoundHandle
+	if activeSoundHandle and StopSound then
+		pcall(StopSound, activeSoundHandle)
+		WML.db.profile.activeSoundHandle = nil
+	end
+
+	if WML.db.profile.savedMusicEnabled ~= nil then
+		SetCVarValue("Sound_EnableMusic", WML.db.profile.savedMusicEnabled)
+		WML.db.profile.savedMusicEnabled = nil
+	end
+
 	self.playlistId = WML.db.profile.selectedPlaylistId
 	WML:RegisterEvent("SOUNDKIT_FINISHED", function(_, soundHandle)
 		Player:OnSoundFinished(soundHandle)
 	end)
 	WML:RegisterEvent("PLAYER_LOGOUT", function()
-		Player:RestoreZoneMusic()
+		Player:Stop(true)
 	end)
 end
 
@@ -73,6 +84,7 @@ function Player:PlayTrack(trackId, playlistId, trackIds)
 		self.queueTrackIds = CopyTrackIds(trackIds)
 	end
 	self.soundHandle = soundHandle
+	WML.db.profile.activeSoundHandle = soundHandle
 	self.isPlaying = true
 	self:StartFinishWatcher()
 
@@ -93,6 +105,7 @@ function Player:OnSoundFinished(soundHandle)
 	self:CancelFinishWatcher()
 	self.soundHandle = nil
 	self.isPlaying = false
+	WML.db.profile.activeSoundHandle = nil
 
 	local track, playlistId = self:GetRelativeTrack(1)
 	if track then
@@ -110,6 +123,7 @@ function Player:Stop(silent, keepZoneMusicMuted)
 
 	self.soundHandle = nil
 	self.isPlaying = false
+	WML.db.profile.activeSoundHandle = nil
 
 	if soundHandle then
 		StopSound(soundHandle)
@@ -165,6 +179,7 @@ function Player:MuteZoneMusic()
 
 	if self.savedMusicEnabled == nil then
 		self.savedMusicEnabled = GetCVarValue("Sound_EnableMusic") or "1"
+		WML.db.profile.savedMusicEnabled = self.savedMusicEnabled
 	end
 
 	SetCVarValue("Sound_EnableMusic", "0")
@@ -175,12 +190,14 @@ function Player:MuteZoneMusic()
 end
 
 function Player:RestoreZoneMusic()
-	if self.savedMusicEnabled == nil then
+	local savedMusicEnabled = self.savedMusicEnabled or WML.db.profile.savedMusicEnabled
+	if savedMusicEnabled == nil then
 		return
 	end
 
-	SetCVarValue("Sound_EnableMusic", self.savedMusicEnabled)
+	SetCVarValue("Sound_EnableMusic", savedMusicEnabled)
 	self.savedMusicEnabled = nil
+	WML.db.profile.savedMusicEnabled = nil
 end
 
 function Player:TogglePlay()

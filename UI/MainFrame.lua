@@ -7,8 +7,15 @@ local MAX_WIDTH = 1200
 local MAX_HEIGHT = 800
 local MINI_WIDTH = 360
 local MINI_HEIGHT = 128
-local MINI_COLLAPSED_WIDTH = 314
+local MINI_COLLAPSED_WIDTH = 260
 local MINI_COLLAPSED_HEIGHT = 40
+local ICONS = {
+    next = "Interface\\AddOns\\SpotiWoW\\Media\\icon-next.png",
+    pause = "Interface\\AddOns\\SpotiWoW\\Media\\icon-pause.png",
+    play = "Interface\\AddOns\\SpotiWoW\\Media\\icon-play.png",
+    previous = "Interface\\AddOns\\SpotiWoW\\Media\\icon-previous.png",
+    shuffle = "Interface\\AddOns\\SpotiWoW\\Media\\icon-shuffle.png",
+}
 
 local function AddDropdownOption(options, text, checked, func)
     table.insert(options, {
@@ -19,14 +26,35 @@ local function AddDropdownOption(options, text, checked, func)
 end
 
 local function CreateCloseButton(parent, onClick)
-    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    UI:StyleButton(button)
+    local button = CreateFrame("Button", nil, parent)
     button:SetSize(22, 22)
-    button:SetText("x")
+    button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    button.text:SetAllPoints()
+    button.text:SetText("x")
+    button.text:SetTextColor(UI.colors.text[1], UI.colors.text[2], UI.colors.text[3], UI.colors.text[4])
     button:SetScript("OnClick", onClick or function()
         parent:Hide()
     end)
+    button:SetScript("OnEnter", function(control)
+        control.text:SetTextColor(1, 0.36, 0.36, 1)
+    end)
+    button:SetScript("OnLeave", function(control)
+        control.text:SetTextColor(UI.colors.text[1], UI.colors.text[2], UI.colors.text[3], UI.colors.text[4])
+    end)
     return button
+end
+
+local function SetButtonIcon(button, texturePath, size)
+    button:SetText("")
+
+    if not button.wmlIcon then
+        button.wmlIcon = button:CreateTexture(nil, "OVERLAY")
+        button.wmlIcon:SetPoint("CENTER")
+    end
+
+    button.wmlIcon:SetSize(size or 16, size or 16)
+    button.wmlIcon:SetTexture(texturePath)
+    button.wmlIcon:SetVertexColor(UI.colors.text[1], UI.colors.text[2], UI.colors.text[3], UI.colors.text[4])
 end
 
 function UI:Initialize()
@@ -89,7 +117,7 @@ function UI:CreateFrame()
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 18, -16)
-    title:SetText("SpotiWoW")
+    title:SetText(WML.displayName or "SpotiWoW")
 
     local sidebar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     self.sidebar = sidebar
@@ -116,6 +144,7 @@ function UI:CreateFrame()
     self:CreateMain()
     self:CreatePlayerBar()
     self:CreateMiniPlayer()
+    self:ApplyScale()
 end
 
 function UI:CreateSidebar()
@@ -195,7 +224,6 @@ function UI:CreateMain()
     self.playlistAddAllButton = addAll
     self:StyleButton(addAll)
     addAll:SetSize(78, 24)
-    addAll:SetPoint("TOPRIGHT", -14, -12)
     addAll:SetText("Add all")
     addAll:SetScript("OnClick", function()
         UI:AddAllVisibleTracks()
@@ -205,7 +233,7 @@ function UI:CreateMain()
     self.playlistPlayButton = play
     self:StyleButton(play)
     play:SetSize(52, 24)
-    play:SetPoint("RIGHT", addAll, "LEFT", -6, 0)
+    play:SetPoint("TOPRIGHT", -14, -12)
     play:SetText("Play")
     play:SetScript("OnClick", function()
         UI:PlayVisibleTrack(false)
@@ -213,7 +241,7 @@ function UI:CreateMain()
 
     local search = CreateFrame("EditBox", nil, self.main, "InputBoxTemplate")
     self.searchBox = search
-    search:SetSize(430, 28)
+    search:SetSize(172, 28)
     search:SetPoint("TOPLEFT", 14, -46)
     search:SetAutoFocus(false)
     self:StyleEditBox(search)
@@ -227,7 +255,7 @@ function UI:CreateMain()
         return UI:BuildZoneDropdown()
     end)
     self.zoneDropdown = zoneDropdown
-    zoneDropdown:SetPoint("TOPLEFT", self.main, "TOPLEFT", 14, -80)
+    zoneDropdown:SetPoint("LEFT", search, "RIGHT", 8, 0)
 
     local timeDropdown = self:CreateDropdown(self.main, 140, function()
         return UI:BuildTimeDropdown()
@@ -237,20 +265,21 @@ function UI:CreateMain()
 
     local targetLabel = self.main:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     self.targetLabel = targetLabel
-    targetLabel:SetPoint("TOPLEFT", 18, -130)
+    targetLabel:SetPoint("TOPLEFT", 18, -98)
     targetLabel:SetText("Add to")
 
     local targetDropdown = self:CreateDropdown(self.main, 240, function()
         return UI:BuildTargetDropdown()
     end)
     self.targetDropdown = targetDropdown
-    targetDropdown:SetPoint("TOPLEFT", self.main, "TOPLEFT", 74, -122)
+    targetDropdown:SetPoint("TOPLEFT", self.main, "TOPLEFT", 74, -90)
+    addAll:SetPoint("LEFT", targetDropdown, "RIGHT", 8, 0)
 
     local nextPage = CreateFrame("Button", nil, self.main, "UIPanelButtonTemplate")
     self.nextPageButton = nextPage
     self:StyleButton(nextPage)
     nextPage:SetSize(54, 24)
-    nextPage:SetPoint("TOPRIGHT", self.main, "TOPRIGHT", -14, -124)
+    nextPage:SetPoint("TOPRIGHT", self.main, "TOPRIGHT", -14, -92)
     nextPage:SetText("Next")
     nextPage:SetScript("OnClick", function()
         UI:SetTrackPage((UI.trackPage or 1) + 1)
@@ -304,21 +333,33 @@ function UI:CreateMain()
     settingsPanel:SetPoint("TOPLEFT", self.main, "TOPLEFT", 14, -56)
     settingsPanel:SetPoint("BOTTOMRIGHT", self.main, "BOTTOMRIGHT", -14, 14)
 
+    local scaleLabel = settingsPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    scaleLabel:SetPoint("TOPLEFT", 0, -8)
+    scaleLabel:SetText("SpotiWoW Scale")
+    scaleLabel:SetTextColor(self.colors.text[1], self.colors.text[2], self.colors.text[3], self.colors.text[4])
+
+    local scaleDropdown = self:CreateDropdown(settingsPanel, 150, function()
+        return UI:BuildScaleDropdown()
+    end)
+    self.scaleDropdown = scaleDropdown
+    scaleDropdown:SetPoint("TOPLEFT", 120, 0)
+
     local audioLabel = settingsPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    audioLabel:SetPoint("TOPLEFT", 0, -8)
+    audioLabel:SetPoint("TOPLEFT", 0, -48)
     audioLabel:SetText("Audio channel")
+    audioLabel:SetTextColor(self.colors.text[1], self.colors.text[2], self.colors.text[3], self.colors.text[4])
 
     local audioDropdown = self:CreateDropdown(settingsPanel, 220, function()
         return UI:BuildAudioChannelDropdown()
     end)
     self.audioChannelDropdown = audioDropdown
-    audioDropdown:SetPoint("TOPLEFT", 120, 0)
+    audioDropdown:SetPoint("TOPLEFT", 120, -40)
 
     local resetButton = CreateFrame("Button", nil, settingsPanel, "UIPanelButtonTemplate")
     self.resetWindowButton = resetButton
     self:StyleButton(resetButton)
     resetButton:SetSize(150, 26)
-    resetButton:SetPoint("TOPLEFT", 120, -42)
+    resetButton:SetPoint("TOPLEFT", 120, -82)
     resetButton:SetText("Reset window")
     resetButton:SetScript("OnClick", function()
         UI:ResetPosition()
@@ -328,25 +369,46 @@ function UI:CreateMain()
     self.openMiniPlayerButton = miniButton
     self:StyleButton(miniButton)
     miniButton:SetSize(150, 26)
-    miniButton:SetPoint("TOPLEFT", resetButton, "BOTTOMLEFT", 0, -8)
-    miniButton:SetText("Open mini player")
+    miniButton:SetPoint("TOPLEFT", 120, -144)
+    miniButton:SetText("Open Mini Player")
     miniButton:SetScript("OnClick", function()
         UI:ShowMiniPlayer()
     end)
 
+    local miniHeader = settingsPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    miniHeader:SetPoint("TOPLEFT", 0, -124)
+    miniHeader:SetText("Mini Player")
+    miniHeader:SetTextColor(1, 0.82, 0.05, 1)
+
     local miniOpacityLabel = settingsPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    miniOpacityLabel:SetPoint("TOPLEFT", 0, -116)
-    miniOpacityLabel:SetText("Mini opacity")
+    miniOpacityLabel:SetPoint("TOPLEFT", 0, -188)
+    miniOpacityLabel:SetText("Opacity")
+    miniOpacityLabel:SetTextColor(self.colors.text[1], self.colors.text[2], self.colors.text[3], self.colors.text[4])
 
     local miniOpacityDropdown = self:CreateDropdown(settingsPanel, 150, function()
         return UI:BuildMiniOpacityDropdown()
     end)
     self.miniOpacityDropdown = miniOpacityDropdown
-    miniOpacityDropdown:SetPoint("TOPLEFT", 120, -108)
+    miniOpacityDropdown:SetPoint("TOPLEFT", 120, -180)
+
+    local feedbackHeader = settingsPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    feedbackHeader:SetPoint("TOPLEFT", 0, -228)
+    feedbackHeader:SetText("Feedback or Bugs")
+    feedbackHeader:SetTextColor(1, 0.82, 0.05, 1)
+
+    local feedbackButton = CreateFrame("Button", nil, settingsPanel, "UIPanelButtonTemplate")
+    self.feedbackButton = feedbackButton
+    self:StyleButton(feedbackButton)
+    feedbackButton:SetSize(150, 26)
+    feedbackButton:SetPoint("TOPLEFT", 120, -248)
+    feedbackButton:SetText("GitHub Project")
+    feedbackButton:SetScript("OnClick", function()
+        WML:OpenProjectPage()
+    end)
 
     local scroll = CreateFrame("ScrollFrame", "SpotiWoWTrackScroll", self.main, "UIPanelScrollFrameTemplate")
     self.trackScroll = scroll
-    scroll:SetPoint("TOPLEFT", 14, -166)
+    scroll:SetPoint("TOPLEFT", 14, -132)
     scroll:SetPoint("BOTTOMRIGHT", -30, 14)
     self:StyleScrollBar(scroll)
 
@@ -360,9 +422,9 @@ function UI:CreatePlayerBar()
     local shuffle = CreateFrame("Button", nil, self.bottom, "UIPanelButtonTemplate")
     self.shuffleButton = shuffle
     self:StyleButton(shuffle)
-    shuffle:SetSize(58, 28)
+    shuffle:SetSize(42, 28)
     shuffle:SetPoint("LEFT", 14, 0)
-    shuffle:SetText("Shuffle")
+    SetButtonIcon(shuffle, ICONS.shuffle, 17)
     shuffle:SetScript("OnClick", function()
         UI:ToggleShuffle()
     end)
@@ -371,7 +433,7 @@ function UI:CreatePlayerBar()
     self:StyleButton(prev)
     prev:SetSize(34, 28)
     prev:SetPoint("LEFT", shuffle, "RIGHT", 6, 0)
-    prev:SetText("<<")
+    SetButtonIcon(prev, ICONS.previous, 16)
     prev:SetScript("OnClick", function()
         WML.Player:Previous()
     end)
@@ -385,20 +447,11 @@ function UI:CreatePlayerBar()
         WML.Player:TogglePlay()
     end)
 
-    local stop = CreateFrame("Button", nil, self.bottom, "UIPanelButtonTemplate")
-    self:StyleButton(stop)
-    stop:SetSize(44, 28)
-    stop:SetPoint("LEFT", play, "RIGHT", 6, 0)
-    stop:SetText("Stop")
-    stop:SetScript("OnClick", function()
-        WML.Player:Stop()
-    end)
-
     local next = CreateFrame("Button", nil, self.bottom, "UIPanelButtonTemplate")
     self:StyleButton(next)
     next:SetSize(34, 28)
-    next:SetPoint("LEFT", stop, "RIGHT", 6, 0)
-    next:SetText(">>")
+    next:SetPoint("LEFT", play, "RIGHT", 6, 0)
+    SetButtonIcon(next, ICONS.next, 16)
     next:SetScript("OnClick", function()
         WML.Player:Next()
     end)
@@ -456,9 +509,8 @@ function UI:CreateMiniPlayer()
     title.text = title:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title.text:SetAllPoints()
     title.text:SetJustifyH("LEFT")
-    title.text:SetText("SpotiWoW")
     title:SetPoint("TOPLEFT", 12, -12)
-    title:SetSize(90, 22)
+    title:SetSize(122, 22)
     title:SetScript("OnClick", function()
         UI:ToggleMiniCollapsed()
     end)
@@ -467,6 +519,7 @@ function UI:CreateMiniPlayer()
         return UI:BuildMiniPlaylistDropdown()
     end)
     self.miniPlaylistDropdown = playlistDropdown
+    playlistDropdown.maxRows = 20
     playlistDropdown:SetPoint("TOPLEFT", 12, -36)
 
     local prev = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -474,7 +527,7 @@ function UI:CreateMiniPlayer()
     self:StyleButton(prev)
     prev:SetSize(34, 26)
     prev:SetPoint("TOPLEFT", 12, -70)
-    prev:SetText("<<")
+    SetButtonIcon(prev, ICONS.previous, 16)
     prev:SetScript("OnClick", function()
         WML.Player:Previous()
     end)
@@ -488,22 +541,12 @@ function UI:CreateMiniPlayer()
         WML.Player:TogglePlay()
     end)
 
-    local stop = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    self.miniStopButton = stop
-    self:StyleButton(stop)
-    stop:SetSize(44, 26)
-    stop:SetPoint("LEFT", play, "RIGHT", 6, 0)
-    stop:SetText("Stop")
-    stop:SetScript("OnClick", function()
-        WML.Player:Stop()
-    end)
-
     local next = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     self.miniNextButton = next
     self:StyleButton(next)
     next:SetSize(34, 26)
-    next:SetPoint("LEFT", stop, "RIGHT", 6, 0)
-    next:SetText(">>")
+    next:SetPoint("LEFT", play, "RIGHT", 6, 0)
+    SetButtonIcon(next, ICONS.next, 16)
     next:SetScript("OnClick", function()
         WML.Player:Next()
     end)
@@ -511,9 +554,9 @@ function UI:CreateMiniPlayer()
     local shuffle = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     self.miniShuffleButton = shuffle
     self:StyleButton(shuffle)
-    shuffle:SetSize(58, 26)
+    shuffle:SetSize(42, 26)
     shuffle:SetPoint("LEFT", next, "RIGHT", 6, 0)
-    shuffle:SetText("Shuffle")
+    SetButtonIcon(shuffle, ICONS.shuffle, 17)
     shuffle:SetScript("OnClick", function()
         UI:ToggleShuffle()
     end)
@@ -547,8 +590,30 @@ function UI:ApplyMiniPlayerOpacity()
     self.miniFrame:SetBackdropColor(color[1], color[2], color[3], self:GetMiniPlayerOpacity())
 end
 
+function UI:GetScale()
+    return math.min(1, math.max(0.75, tonumber(WML.db.profile.uiScale) or 1))
+end
+
+function UI:ApplyScale()
+    local scale = self:GetScale()
+
+    if self.frame then
+        self.frame:SetScale(scale)
+    end
+
+    if self.miniFrame then
+        self.miniFrame:SetScale(scale)
+    end
+end
+
 function UI:ToggleMiniCollapsed()
     self:SetMiniCollapsed(not WML.db.profile.miniCollapsed)
+end
+
+function UI:UpdateMiniTitle(collapsed)
+    if self.miniTitleButton and self.miniTitleButton.text then
+        self.miniTitleButton.text:SetText((collapsed and "> " or "v ") .. (WML.displayName or "SpotiWoW"))
+    end
 end
 
 function UI:SetMiniCollapsed(collapsed)
@@ -570,7 +635,8 @@ function UI:SetMiniCollapsed(collapsed)
 
     self.miniTitleButton:ClearAllPoints()
     self.miniTitleButton:SetPoint("TOPLEFT", collapsed and 10 or 12, collapsed and -9 or -10)
-    self.miniTitleButton:SetSize(collapsed and 74 or 110, 22)
+    self.miniTitleButton:SetSize(collapsed and 86 or 122, 22)
+    self:UpdateMiniTitle(collapsed)
 
     self.miniPrevButton:ClearAllPoints()
     if collapsed then
@@ -582,11 +648,8 @@ function UI:SetMiniCollapsed(collapsed)
     self.miniPlayButton:ClearAllPoints()
     self.miniPlayButton:SetPoint("LEFT", self.miniPrevButton, "RIGHT", 6, 0)
 
-    self.miniStopButton:ClearAllPoints()
-    self.miniStopButton:SetPoint("LEFT", self.miniPlayButton, "RIGHT", 6, 0)
-
     self.miniNextButton:ClearAllPoints()
-    self.miniNextButton:SetPoint("LEFT", self.miniStopButton, "RIGHT", 6, 0)
+    self.miniNextButton:SetPoint("LEFT", self.miniPlayButton, "RIGHT", 6, 0)
 
     self.miniShuffleButton:ClearAllPoints()
     self.miniShuffleButton:SetPoint("LEFT", self.miniNextButton, "RIGHT", 6, 0)
@@ -632,7 +695,7 @@ function UI:RefreshMiniPlayer(state)
 
     state = state or WML.Player:GetState()
 
-    self.miniPlayButton:SetText(state.isPlaying and "Pause" or "Play")
+    SetButtonIcon(self.miniPlayButton, state.isPlaying and ICONS.pause or ICONS.play, 16)
     self:SetButtonActive(self.miniShuffleButton, WML.db.profile.shuffle)
 
     local playlist = WML.Library:GetPlaylist(self:GetMiniPlaylistId())
@@ -732,7 +795,7 @@ end
 function UI:RefreshPlayerBar()
     local state = WML.Player:GetState()
 
-    self.playButton:SetText(state.isPlaying and "Pause" or "Play")
+    SetButtonIcon(self.playButton, state.isPlaying and ICONS.pause or ICONS.play, 16)
     self:SetButtonActive(self.shuffleButton, WML.db.profile.shuffle)
     self.progress:SetValue(state.isPlaying and 1 or 0)
 
