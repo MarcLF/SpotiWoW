@@ -94,6 +94,16 @@ function UI:CreateFrame()
     local closeButton = CreateCloseButton(frame)
     closeButton:SetPoint("TOPRIGHT", -8, -8)
 
+    local miniButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    self.openMiniPlayerButton = miniButton
+    self:StyleButton(miniButton)
+    miniButton:SetSize(130, 22)
+    miniButton:SetPoint("RIGHT", closeButton, "LEFT", -8, 0)
+    miniButton:SetText("Open Mini Player")
+    miniButton:SetScript("OnClick", function()
+        UI:ShowMiniPlayer()
+    end)
+
     local resizeButton = CreateFrame("Button", nil, frame, "PanelResizeButtonTemplate")
     resizeButton:SetPoint("BOTTOMRIGHT", -5, 5)
     if resizeButton.Init then
@@ -365,23 +375,13 @@ function UI:CreateMain()
         UI:ResetPosition()
     end)
 
-    local miniButton = CreateFrame("Button", nil, settingsPanel, "UIPanelButtonTemplate")
-    self.openMiniPlayerButton = miniButton
-    self:StyleButton(miniButton)
-    miniButton:SetSize(150, 26)
-    miniButton:SetPoint("TOPLEFT", 120, -144)
-    miniButton:SetText("Open Mini Player")
-    miniButton:SetScript("OnClick", function()
-        UI:ShowMiniPlayer()
-    end)
-
     local miniHeader = settingsPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     miniHeader:SetPoint("TOPLEFT", 0, -124)
     miniHeader:SetText("Mini Player")
     miniHeader:SetTextColor(1, 0.82, 0.05, 1)
 
     local miniOpacityLabel = settingsPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    miniOpacityLabel:SetPoint("TOPLEFT", 0, -188)
+    miniOpacityLabel:SetPoint("TOPLEFT", 0, -148)
     miniOpacityLabel:SetText("Opacity")
     miniOpacityLabel:SetTextColor(self.colors.text[1], self.colors.text[2], self.colors.text[3], self.colors.text[4])
 
@@ -389,10 +389,10 @@ function UI:CreateMain()
         return UI:BuildMiniOpacityDropdown()
     end)
     self.miniOpacityDropdown = miniOpacityDropdown
-    miniOpacityDropdown:SetPoint("TOPLEFT", 120, -180)
+    miniOpacityDropdown:SetPoint("TOPLEFT", 120, -140)
 
     local feedbackHeader = settingsPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    feedbackHeader:SetPoint("TOPLEFT", 0, -228)
+    feedbackHeader:SetPoint("TOPLEFT", 0, -188)
     feedbackHeader:SetText("Feedback or Bugs")
     feedbackHeader:SetTextColor(1, 0.82, 0.05, 1)
 
@@ -400,7 +400,7 @@ function UI:CreateMain()
     self.feedbackButton = feedbackButton
     self:StyleButton(feedbackButton)
     feedbackButton:SetSize(150, 26)
-    feedbackButton:SetPoint("TOPLEFT", 120, -248)
+    feedbackButton:SetPoint("TOPLEFT", 120, -208)
     feedbackButton:SetText("GitHub Project")
     feedbackButton:SetScript("OnClick", function()
         WML:OpenProjectPage()
